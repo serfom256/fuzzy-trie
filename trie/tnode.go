@@ -44,10 +44,6 @@ func (t *TNode) isEmpty() bool {
 	return t.sequence == nil || len(t.sequence) == 0
 }
 
-func (t *TNode) isRoot() bool {
-	return t.prev == nil
-}
-
 func (t *TNode) removeSuccessor(node *TNode) {
 	for i, element := range t.successors {
 		if element == node {

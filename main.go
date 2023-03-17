@@ -7,31 +7,56 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	trie "trie/trie"
+	utils "trie/etc"
+	"trie/trie"
 )
 
+var config utils.Config
+
 func main() {
-	x := trie.InitTrie()
-	readDir("/", x)
+	cfg, err := utils.ReadConfig("config.yaml")
+	if err != nil {
+		fmt.Println("An error occurred while reading config!")
+	}
+	config = cfg
+	printConfig()
+	fuzzyTrie := trie.InitTrie()
+	for _, j := range config.Paths {
+		readDir(j, fuzzyTrie)
+	}
+	start(*fuzzyTrie)
+}
+
+func search(query string, f func(string, int, int) []trie.Result) {
+	t1 := time.Now()
+	dist := config.Trie.Search.Distance
+	fetchSize := config.Trie.Search.Fetch
+	result := f(query, dist, fetchSize)
+	for _, j := range result {
+		fmt.Println(j.Key, j.Value)
+		fmt.Println()
+	}
+	fmt.Println("Search time:", time.Now().Sub(t1))
+}
+
+func start(fuzzyTrie trie.Trie) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Indexed total: ", x.Size())
+	fmt.Println("\n\nIndexed total: ", fuzzyTrie.Size())
 	for {
-		fmt.Print("Enter to search: ")
+		fmt.Print("\nEnter to search: ")
 		text, _ := reader.ReadString('\n')
 		text = strings.Replace(text, "\n", "", -1)
-		search(text[:len(text)-1], x.Search)
-
+		search(text[:len(text)-1], fuzzyTrie.Search)
 	}
 }
-func search(query string, f func(string, int, int) map[string][]string) {
-	t1 := time.Now()
-	result := f(query, 2, 100)
-	for j, i := range result {
-		fmt.Println(j, i)
-		fmt.Println("\n\n")
-	}
-	fmt.Println(time.Now().Sub(t1))
+
+func printConfig() {
+	fmt.Println("Trie search config:")
+	fmt.Println("\ttrie.search.distance =>", config.Trie.Search.Distance)
+	fmt.Println("\ttrie.search.fetch.size =>", config.Trie.Search.Fetch)
+	fmt.Println("\tpaths.to.scan =>", config.Paths)
+	fmt.Println()
+	fmt.Print("Indexing...")
 }
 
 func readDir(path string, t *trie.Trie) {
@@ -48,6 +73,7 @@ func readDir(path string, t *trie.Trie) {
 		return
 	}
 }
+
 func readFile(name string, t *trie.Trie) {
 	file, err := os.Open(name)
 	if err != nil {

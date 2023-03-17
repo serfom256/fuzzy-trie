@@ -3,7 +3,6 @@ package trie
 import (
 	"math"
 	"reflect"
-	"strings"
 	"unicode"
 
 	"github.com/agnivade/levenshtein"
@@ -25,14 +24,13 @@ func (t *Trie) Add(key string, value string) {
 	keyNode.end = true
 }
 
-func (t *Trie) Search(toSearch string, distance int, cnt int) map[string][]string {
-	toSearch = strings.ToLower(toSearch)
-	result := SearchData{count: cnt, typos: distance, toSearch: toSearch, founded: make(map[string][]string, 16), cache: map[*TNode]bool{}}
-	t.lookup(t.root, 0, distance, result)
+func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
+	result := SearchData{count: cnt, typos: distance, toSearch: toSearch, founded: []Result{}, cache: map[*TNode]bool{}}
+	t.lookup(t.root, 0, distance, &result)
 	return result.founded
 }
 
-func (t *Trie) lookup(curr *TNode, pos int, typos int, data SearchData) {
+func (t *Trie) lookup(curr *TNode, pos int, typos int, data *SearchData) {
 	if typos < 0 || curr == nil || data.isFounded() {
 		return
 	}
@@ -56,10 +54,11 @@ func (t *Trie) lookup(curr *TNode, pos int, typos int, data SearchData) {
 	}
 }
 
-func (t *Trie) collectPairs(node *TNode, data SearchData) {
+func (t *Trie) collectPairs(node *TNode, data *SearchData) {
 	if _, ok := data.cache[node]; ok {
 		return
 	}
+	data.cache[node] = true
 	key := t.reverseBranch(node)
 	var values []string
 	if node.pairs != nil {
@@ -67,7 +66,7 @@ func (t *Trie) collectPairs(node *TNode, data SearchData) {
 			values = append(values, string(pair))
 		}
 	}
-	data.founded[key] = values
+	data.founded = append(data.founded, Result{Key: key, Value: values})
 }
 
 func (t *Trie) addSequence(key *string) *TNode {
@@ -110,7 +109,7 @@ func (t *Trie) splitTree(node *TNode) *TNode {
 	toNext.end = node.end
 	replacePair(&curr, &toNext)
 	curr.addSuccessor(&toNext)
-	if prev.isRoot() {
+	if prev == t.root {
 		t.rootNodes[node.element] = &curr
 	}
 	return &curr
@@ -126,7 +125,7 @@ func (t *Trie) insertToRoot(key []byte) *TNode {
 
 func checkConstraints(key *string) {
 	if key == nil || len(*key) == 0 {
-		panic("Specified key is empty")
+		panic("Specified Key is empty")
 	}
 }
 
@@ -166,7 +165,6 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 	} else if pos < len(seq) {
 		newNode := TNode{element: seq[pos], prev: node, sequence: seq[pos+1:]}
 		node.end = isEnd || node.end
-		//newNode.addPairs(pairs)
 		replacePair(temp, node)
 		node.addSuccessor(&newNode)
 		return &newNode
