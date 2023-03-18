@@ -1,12 +1,12 @@
 package trie
 
 import (
+	trieUtils "fuzzy-trie/etc"
+	"github.com/agnivade/levenshtein"
 	"math"
 	"reflect"
 	"strings"
 	"unicode"
-
-	"github.com/agnivade/levenshtein"
 )
 
 type Trie struct {
@@ -126,10 +126,6 @@ func (t *Trie) addSequence(key *string) *TNode {
 	return t.splitTree(curr)
 }
 
-func isCharEquals(a byte, b byte) bool {
-	return math.Abs(float64(int(a)-int(b))) == 32 || a == b
-}
-
 func (t *Trie) splitTree(node *TNode) *TNode {
 	if node.isEmpty() {
 		return node
@@ -208,6 +204,10 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 		return &newNode
 	}
 	return node
+}
+
+func isCharEquals(a byte, b byte) bool {
+	return trieUtils.AbsInt(int(a)-int(b)) == 32 || a == b
 }
 
 func (t *Trie) reverseBranch(node *TNode) string {

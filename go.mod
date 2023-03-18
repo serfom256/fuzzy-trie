@@ -1,4 +1,4 @@
-module trie
+module fuzzy-trie
 
 go 1.19
 

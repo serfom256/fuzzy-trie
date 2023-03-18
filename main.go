@@ -3,13 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
+	utils "fuzzy-trie/etc"
+	"fuzzy-trie/trie"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
-	utils "trie/etc"
-	"trie/trie"
 )
 
 var config utils.Config

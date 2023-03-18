@@ -1,5 +1,7 @@
 package trie
 
+import trieUtils "fuzzy-trie/etc"
+
 type TNode struct {
 	element    byte
 	sequence   []byte
@@ -47,13 +49,15 @@ func (t *TNode) isEmpty() bool {
 }
 
 func (t *TNode) get(b byte) (*TNode, bool) {
+	bt := int(b)
 	for _, j := range t.successors {
-		if j.element == b {
+		if j.element == b || trieUtils.AbsInt(int(j.element)-bt) == 32 {
 			return j, true
 		}
 	}
 	return nil, false
 }
+
 func (t *TNode) removeSuccessor(node *TNode) {
 	for i, element := range t.successors {
 		if element == node {
