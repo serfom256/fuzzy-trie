@@ -1,4 +1,4 @@
-module fuzzy-trie
+module github.com/serfom256/fuzzy-trie
 
 go 1.19
 

@@ -1,6 +1,6 @@
 package trie
 
-import trieUtils "fuzzy-trie/etc"
+import trieUtils "github.com/serfom256/fuzzy-trie/etc"
 
 type TNode struct {
 	element    byte

@@ -1,8 +1,8 @@
 package trie
 
 import (
-	trieUtils "fuzzy-trie/etc"
 	"github.com/agnivade/levenshtein"
+	trieUtils "github.com/serfom256/fuzzy-trie/etc"
 	"math"
 	"reflect"
 	"strings"

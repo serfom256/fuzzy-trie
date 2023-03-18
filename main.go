@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
-	utils "fuzzy-trie/etc"
-	"fuzzy-trie/trie"
+	utils "github.com/serfom256/fuzzy-trie/etc"
+	"github.com/serfom256/fuzzy-trie/trie"
 	"os"
 	"path/filepath"
 	"reflect"
