@@ -19,6 +19,7 @@ const (
 	suffixRegex = '*'
 )
 
+// Add Appends a pair of key and value to map
 func (t *Trie) Add(key string, value string) {
 	checkConstraints(&key)
 	keyNode := t.addSequence(&key)
@@ -29,6 +30,7 @@ func (t *Trie) Add(key string, value string) {
 	keyNode.end = true
 }
 
+// Search returns result founded by the specified key
 func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
 	result := SearchData{count: cnt, typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, cache: map[*TNode]bool{}}
 	t.lookup(t.root, 0, distance, &result)

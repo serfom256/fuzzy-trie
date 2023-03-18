@@ -14,8 +14,8 @@ This is the radix trie that optimized for fuzzy search and fuzzy suggestion by p
 
 ## API Usage
 
-- Add(key, value)
-- Search(key, fuzzy search distance, the number of results to be fetched)
+- Add (key, value)
+- Search (key, fuzzy search distance, the number of results to be fetched)
 
 ```go
 fuzzyTrie := trie.InitTrie()
