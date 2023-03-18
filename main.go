@@ -74,6 +74,7 @@ func readDir(path string, t *trie.Trie) {
 			}
 			// readFile(path, t)
 			t.Add(info.Name(), path)
+			t.Add(info.ModTime().String(), path)
 			return nil
 		})
 	if err != nil {
