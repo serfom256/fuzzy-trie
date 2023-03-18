@@ -3,6 +3,7 @@ package trie
 import (
 	"math"
 	"reflect"
+	"strings"
 	"unicode"
 
 	"github.com/agnivade/levenshtein"
@@ -13,6 +14,10 @@ type Trie struct {
 	root      *TNode
 	rootNodes map[byte]*TNode
 }
+
+const (
+	suffixRegex = '*'
+)
 
 func (t *Trie) Add(key string, value string) {
 	checkConstraints(&key)
@@ -25,7 +30,7 @@ func (t *Trie) Add(key string, value string) {
 }
 
 func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
-	result := SearchData{count: cnt, typos: distance, toSearch: toSearch, founded: []Result{}, cache: map[*TNode]bool{}}
+	result := SearchData{count: cnt, typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, cache: map[*TNode]bool{}}
 	t.lookup(t.root, 0, distance, &result)
 	return result.founded
 }
@@ -34,14 +39,25 @@ func (t *Trie) lookup(curr *TNode, pos int, typos int, data *SearchData) {
 	if typos < 0 || curr == nil || data.isFounded() {
 		return
 	}
+	if pos < len(data.toSearch) && data.toSearch[pos] == suffixRegex {
+		t.collectSuffixes(curr, data)
+		return
+	}
 	if curr.end && isSame(t.reverseBranchLower(curr), data.toSearch, data.typos) { //todo optimize with with caching
 		t.collectPairs(curr, data)
 	}
 	if curr.successors == nil {
 		return
 	}
+	hasNext := false
+	if pos < len(data.toSearch) {
+		if next, contains := curr.get(data.toSearch[pos]); contains {
+			t.lookup(next, pos+1, typos, data)
+			hasNext = true
+		}
+	}
 	for _, node := range curr.successors {
-		if pos < len(data.toSearch) && isCharEquals(node.element, data.toSearch[pos]) {
+		if !hasNext && pos < len(data.toSearch) && isCharEquals(node.element, data.toSearch[pos]) {
 			t.lookup(node, pos+1, typos, data)
 		} else {
 			t.lookup(node, pos+1, typos-1, data)
@@ -67,6 +83,24 @@ func (t *Trie) collectPairs(node *TNode, data *SearchData) {
 		}
 	}
 	data.founded = append(data.founded, Result{Key: key, Value: values})
+}
+
+func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
+	if node == nil || data.isFounded() || data.cache[node] {
+		return
+	}
+	if node.end {
+		t.collectPairs(node, data)
+	}
+	if node.successors == nil {
+		return
+	}
+	for _, j := range node.successors {
+		if data.isFounded() {
+			return
+		}
+		t.collectSuffixes(j, data)
+	}
 }
 
 func (t *Trie) addSequence(key *string) *TNode {
@@ -107,7 +141,8 @@ func (t *Trie) splitTree(node *TNode) *TNode {
 	prev.addSuccessor(&curr)
 	toNext := TNode{element: node.sequence[0], prev: &curr, sequence: node.sequence[1:]}
 	toNext.end = node.end
-	replacePair(&curr, &toNext)
+	toNext.pairs = node.pairs
+	node.pairs = nil
 	curr.addSuccessor(&toNext)
 	if prev == t.root {
 		t.rootNodes[node.element] = &curr
@@ -139,8 +174,9 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 	node.sequence = nil
 	isEnd := node.end
 	node.end = false
+	tempPairs := node.pairs
+	node.pairs = nil
 	pos := 0
-	temp := node
 	length := int(math.Min(float64(len(seq)), float64(len(nodeSeq))))
 	for pos < length && seq[pos] == nodeSeq[pos] {
 		newNode := TNode{element: seq[pos], prev: node}
@@ -152,20 +188,20 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 		inserted := TNode{element: seq[pos], prev: node, sequence: seq[pos+1:]}
 		newNode := TNode{element: nodeSeq[pos], prev: node, sequence: nodeSeq[pos+1:]}
 		newNode.end = isEnd || newNode.end
-		replacePair(temp, &newNode)
+		newNode.pairs = tempPairs
 		node.addSuccessor(&newNode)
 		node.addSuccessor(&inserted)
 		return &inserted
 	} else if pos < len(nodeSeq) {
 		newNode := TNode{element: nodeSeq[pos], prev: node, sequence: nodeSeq[pos+1:]}
 		newNode.end = isEnd || newNode.end
-		replacePair(temp, &newNode)
+		newNode.pairs = tempPairs
 		node.addSuccessor(&newNode)
 		return node
 	} else if pos < len(seq) {
 		newNode := TNode{element: seq[pos], prev: node, sequence: seq[pos+1:]}
 		node.end = isEnd || node.end
-		replacePair(temp, node)
+		node.pairs = tempPairs
 		node.addSuccessor(&newNode)
 		return &newNode
 	}
@@ -202,14 +238,6 @@ func (t *Trie) reverseBranchLower(node *TNode) string {
 	return string(str)
 }
 
-func replacePair(node *TNode, replaced *TNode) {
-	if node.pairs == nil || node == replaced {
-		return
-	}
-	replaced.addPairs(node.pairs)
-	replaced.addPairs(node.pairs)
-	node.pairs = nil
-}
 func isSame(s1 string, s2 string, distance int) bool {
 	return levenshtein.ComputeDistance(s1, s2) <= distance
 }

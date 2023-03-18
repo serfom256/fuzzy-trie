@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 	utils "trie/etc"
@@ -14,11 +15,7 @@ import (
 var config utils.Config
 
 func main() {
-	cfg, err := utils.ReadConfig("config.yaml")
-	if err != nil {
-		fmt.Println("An error occurred while reading config!")
-	}
-	config = cfg
+	config = utils.ReadConfig("config.yaml")
 	printConfig()
 	fuzzyTrie := trie.InitTrie()
 	for _, j := range config.Paths {
@@ -28,6 +25,7 @@ func main() {
 }
 
 func search(query string, f func(string, int, int) []trie.Result) {
+	updateConfig()
 	t1 := time.Now()
 	dist := config.Trie.Search.Distance
 	fetchSize := config.Trie.Search.Fetch
@@ -57,6 +55,15 @@ func printConfig() {
 	fmt.Println("\tpaths.to.scan =>", config.Paths)
 	fmt.Println()
 	fmt.Print("Indexing...")
+}
+
+func updateConfig() {
+	newConfig := utils.ReadConfig("config.yaml")
+	if !reflect.DeepEqual(config, newConfig) {
+		config = newConfig
+		fmt.Println("\nConfig updated!")
+		fmt.Println()
+	}
 }
 
 func readDir(path string, t *trie.Trie) {

@@ -20,6 +20,7 @@ func (t *TNode) findSuccessor(b byte) *TNode {
 	}
 	return nil
 }
+
 func (t *TNode) addSuccessor(node *TNode) {
 	if t.successors == nil {
 		t.successors = []*TNode{}
@@ -33,6 +34,7 @@ func (t *TNode) addPairs(pairs [][]byte) {
 	}
 	t.pairs = append(t.pairs, pairs...)
 }
+
 func (t *TNode) addPair(pair []byte) {
 	if t.pairs == nil {
 		t.pairs = [][]byte{}
@@ -44,6 +46,14 @@ func (t *TNode) isEmpty() bool {
 	return t.sequence == nil || len(t.sequence) == 0
 }
 
+func (t *TNode) get(b byte) (*TNode, bool) {
+	for _, j := range t.successors {
+		if j.element == b {
+			return j, true
+		}
+	}
+	return nil, false
+}
 func (t *TNode) removeSuccessor(node *TNode) {
 	for i, element := range t.successors {
 		if element == node {
