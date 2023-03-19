@@ -21,7 +21,9 @@ const (
 
 // Add Appends a pair of key and value to map
 func (t *Trie) Add(key string, value string) {
-	checkConstraints(&key)
+	if !checkConstraints(&key) {
+		return
+	}
 	keyNode := t.addSequence(&key)
 	if !keyNode.end {
 		t.size++
@@ -32,40 +34,40 @@ func (t *Trie) Add(key string, value string) {
 
 // Search returns result founded by the specified key
 func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
-	result := SearchData{count: cnt, typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, cache: map[*TNode]bool{}}
+	result := SearchData{count: cnt, typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}}
 	t.lookup(t.root, 0, distance, &result)
 	return result.founded
 }
 
-func (t *Trie) lookup(curr *TNode, pos int, typos int, data *SearchData) {
-	if typos < 0 || curr == nil || data.isFounded() {
+func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
+	hash := ((dist + 1) << (data.typos + 1)) | (pos + 1)
+	if dist < 0 || curr == nil || data.isFounded() || data.nodeCache[curr] == hash {
 		return
 	}
+	data.nodeCache[curr] = hash
 	if pos < len(data.toSearch) && data.toSearch[pos] == suffixRegex {
 		t.collectSuffixes(curr, data)
 		return
 	}
-	if curr.end && isSame(t.reverseBranchLower(curr), data.toSearch, data.typos) { //todo optimize with with caching
+	if curr.end && isSame(t.reverseBranchLower(curr), data.toSearch, data.typos) {
 		t.collectPairs(curr, data)
 	}
 	if curr.successors == nil {
 		return
 	}
-	hasNext := false
 	if pos < len(data.toSearch) {
 		if next, contains := curr.get(data.toSearch[pos]); contains {
-			t.lookup(next, pos+1, typos, data)
-			hasNext = true
+			t.lookup(next, pos+1, dist, data)
 		}
 	}
 	for _, node := range curr.successors {
-		if !hasNext && pos < len(data.toSearch) && isCharEquals(node.element, data.toSearch[pos]) {
-			t.lookup(node, pos+1, typos, data)
+		if pos < len(data.toSearch) && isCharEquals(node.element, data.toSearch[pos]) {
+			t.lookup(node, pos+1, dist, data)
 		} else {
-			t.lookup(node, pos+1, typos-1, data)
+			t.lookup(node, pos+1, dist-1, data)
 		}
-		t.lookup(node, pos, typos-1, data)
-		t.lookup(curr, pos+1, typos-1, data)
+		t.lookup(node, pos, dist-1, data)
+		t.lookup(curr, pos+1, dist-1, data)
 		if data.isFounded() {
 			return
 		}
@@ -73,10 +75,10 @@ func (t *Trie) lookup(curr *TNode, pos int, typos int, data *SearchData) {
 }
 
 func (t *Trie) collectPairs(node *TNode, data *SearchData) {
-	if _, ok := data.cache[node]; ok {
+	if _, ok := data.resultCache[node]; ok {
 		return
 	}
-	data.cache[node] = true
+	data.resultCache[node] = true
 	key := t.reverseBranch(node)
 	var values []string
 	if node.pairs != nil {
@@ -88,7 +90,7 @@ func (t *Trie) collectPairs(node *TNode, data *SearchData) {
 }
 
 func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
-	if node == nil || data.isFounded() || data.cache[node] {
+	if node == nil || data.isFounded() || data.resultCache[node] {
 		return
 	}
 	if node.end {
@@ -156,10 +158,11 @@ func (t *Trie) insertToRoot(key []byte) *TNode {
 	return &rootNode
 }
 
-func checkConstraints(key *string) {
+func checkConstraints(key *string) bool {
 	if key == nil || len(*key) == 0 {
-		panic("Specified Key is empty")
+		return false
 	}
+	return true
 }
 
 func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {

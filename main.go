@@ -26,9 +26,9 @@ func main() {
 
 func search(query string, f func(string, int, int) []trie.Result) {
 	updateConfig()
-	t1 := time.Now()
 	dist := config.Trie.Search.Distance
 	fetchSize := config.Trie.Search.Fetch
+	t1 := time.Now()
 	result := f(query, dist, fetchSize)
 	for _, j := range result {
 		fmt.Println(j.Key, j.Value)
