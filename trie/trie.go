@@ -6,7 +6,6 @@ import (
 	"math"
 	"reflect"
 	"strings"
-	"unicode"
 )
 
 type Trie struct {
@@ -232,7 +231,7 @@ func (t *Trie) reverseBranchLower(node *TNode) string {
 	var str []byte
 	origin := node
 	for node != nil {
-		str = append(str, byte(unicode.ToLower(rune(node.element))))
+		str = append(str, node.element)
 		node = node.prev
 	}
 
@@ -240,7 +239,7 @@ func (t *Trie) reverseBranchLower(node *TNode) string {
 		str[i], str[j] = str[j], str[i]
 	}
 	str = append(str, origin.sequence[:]...)
-	return string(str)
+	return strings.ToLower(string(str))
 }
 
 func isSame(s1 string, s2 string, distance int) bool {
