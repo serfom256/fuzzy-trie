@@ -12,6 +12,14 @@ This is the radix trie that optimized for fuzzy search and fuzzy suggestion by p
 
 ---
 
+## Import package from github
+
+```go
+import "github.com/serfom256/fuzzy-trie
+```
+
+---
+
 ## API Usage
 
 - Add (key, value)
@@ -52,7 +60,3 @@ fuzzyTrie.Search("=key_", 3, 10)
 - Support case-insensitive fuzzy search and fuzzy matching by prefix
 
 ---
-
-## License
-
-#### MIT, check the LICENSE file.
