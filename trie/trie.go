@@ -39,7 +39,7 @@ func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
 }
 
 func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
-	hash := ((dist + 1) << (data.typos + 1)) | (pos + 1)
+	hash := ((pos + 1) << data.typos) | dist
 	if dist < 0 || curr == nil || data.isFounded() || data.nodeCache[curr] == hash {
 		return
 	}
