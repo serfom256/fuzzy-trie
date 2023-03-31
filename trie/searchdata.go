@@ -1,14 +1,15 @@
 package trie
 
 type SearchData struct {
-	count       int
-	typos       int
+	Count       int
+	Typos       int
 	toSearch    string
 	founded     []Result
 	resultCache map[*TNode]bool
 	nodeCache   map[*TNode]int
+	onFind      OnFindFunction
 }
 
 func (data *SearchData) isFounded() bool {
-	return data.count < len(data.founded)
+	return data.Count < len(data.founded)
 }

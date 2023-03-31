@@ -14,6 +14,8 @@ type Trie struct {
 	rootNodes map[byte]*TNode
 }
 
+type OnFindFunction func(data SearchData, node TNode) error
+
 const (
 	suffixRegex = '*'
 )
@@ -24,22 +26,22 @@ func (t *Trie) Add(key string, value string) {
 		return
 	}
 	keyNode := t.addSequence(&key)
-	if !keyNode.end {
+	if !keyNode.End {
 		t.size++
 	}
 	keyNode.addPair([]byte(value))
-	keyNode.end = true
+	keyNode.End = true
 }
 
 // Search returns result founded by the specified key
-func (t *Trie) Search(toSearch string, distance int, cnt int) []Result {
-	result := SearchData{count: cnt, typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}}
+func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunction) []Result {
+	result := SearchData{Count: cnt, Typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}, onFind: onFind}
 	t.lookup(t.root, 0, distance, &result)
 	return result.founded
 }
 
 func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
-	hash := ((pos + 1) << data.typos) | dist
+	hash := ((pos + 1) << data.Typos) | dist
 	if dist < 0 || curr == nil || data.isFounded() || data.nodeCache[curr] == hash {
 		return
 	}
@@ -48,10 +50,10 @@ func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
 		t.collectSuffixes(curr, data)
 		return
 	}
-	if curr.end && isSame(t.reverseBranchLower(curr), data.toSearch, data.typos) {
+	if curr.End && isSame(t.reverseBranchLower(curr), data.toSearch, data.Typos) {
 		t.collectPairs(curr, data)
 	}
-	if curr.successors == nil {
+	if curr.Successors == nil {
 		return
 	}
 	if pos < len(data.toSearch) {
@@ -59,8 +61,8 @@ func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
 			t.lookup(next, pos+1, dist, data)
 		}
 	}
-	for _, node := range curr.successors {
-		if pos < len(data.toSearch) && isCharEquals(node.element, data.toSearch[pos]) {
+	for _, node := range curr.Successors {
+		if pos < len(data.toSearch) && isCharEquals(node.Element, data.toSearch[pos]) {
 			t.lookup(node, pos+1, dist, data)
 		} else {
 			t.lookup(node, pos+1, dist-1, data)
@@ -77,11 +79,14 @@ func (t *Trie) collectPairs(node *TNode, data *SearchData) {
 	if _, ok := data.resultCache[node]; ok {
 		return
 	}
+	if err := data.onFind(*data, *node); err != nil {
+		return
+	}
 	data.resultCache[node] = true
 	key := t.reverseBranch(node)
 	var values []string
-	if node.pairs != nil {
-		for _, pair := range node.pairs {
+	if node.Pairs != nil {
+		for _, pair := range node.Pairs {
 			values = append(values, string(pair))
 		}
 	}
@@ -92,13 +97,13 @@ func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
 	if node == nil || data.isFounded() || data.resultCache[node] {
 		return
 	}
-	if node.end {
+	if node.End {
 		t.collectPairs(node, data)
 	}
-	if node.successors == nil {
+	if node.Successors == nil {
 		return
 	}
-	for _, j := range node.successors {
+	for _, j := range node.Successors {
 		if data.isFounded() {
 			return
 		}
@@ -117,7 +122,7 @@ func (t *Trie) addSequence(key *string) *TNode {
 		next := curr.findSuccessor(c)
 		if next == nil {
 			seq := charArray[i:]
-			if reflect.DeepEqual(seq, curr.sequence) {
+			if reflect.DeepEqual(seq, curr.Sequence) {
 				return curr
 			}
 			return t.buildTree(curr, seq)
@@ -131,27 +136,27 @@ func (t *Trie) splitTree(node *TNode) *TNode {
 	if node.isEmpty() {
 		return node
 	}
-	prev := node.prev
+	prev := node.Prev
 	if prev == nil {
 		prev = t.root
 	}
 	prev.removeSuccessor(node)
-	curr := TNode{element: node.element, prev: prev}
+	curr := TNode{Element: node.Element, Prev: prev}
 	prev.addSuccessor(&curr)
-	toNext := TNode{element: node.sequence[0], prev: &curr, sequence: node.sequence[1:]}
-	toNext.end = node.end
-	toNext.pairs = node.pairs
-	node.pairs = nil
+	toNext := TNode{Element: node.Sequence[0], Prev: &curr, Sequence: node.Sequence[1:]}
+	toNext.End = node.End
+	toNext.Pairs = node.Pairs
+	node.Pairs = nil
 	curr.addSuccessor(&toNext)
 	if prev == t.root {
-		t.rootNodes[node.element] = &curr
+		t.rootNodes[node.Element] = &curr
 	}
 	return &curr
 }
 
 func (t *Trie) insertToRoot(key []byte) *TNode {
 	first := key[0]
-	rootNode := TNode{element: first, sequence: key[1:], end: false, prev: nil}
+	rootNode := TNode{Element: first, Sequence: key[1:], End: false, Prev: nil}
 	t.rootNodes[first] = &rootNode
 	t.root.addSuccessor(&rootNode)
 	return &rootNode
@@ -165,43 +170,43 @@ func checkConstraints(key *string) bool {
 }
 
 func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
-	if node.sequence == nil {
-		newNode := TNode{element: seq[0], prev: node, sequence: seq[1:]}
+	if node.Sequence == nil {
+		newNode := TNode{Element: seq[0], Prev: node, Sequence: seq[1:]}
 		node.addSuccessor(&newNode)
 		return &newNode
 	}
-	nodeSeq := node.sequence
-	node.sequence = nil
-	isEnd := node.end
-	node.end = false
-	tempPairs := node.pairs
-	node.pairs = nil
+	nodeSeq := node.Sequence
+	node.Sequence = nil
+	isEnd := node.End
+	node.End = false
+	tempPairs := node.Pairs
+	node.Pairs = nil
 	pos := 0
 	length := int(math.Min(float64(len(seq)), float64(len(nodeSeq))))
 	for pos < length && seq[pos] == nodeSeq[pos] {
-		newNode := TNode{element: seq[pos], prev: node}
+		newNode := TNode{Element: seq[pos], Prev: node}
 		node.addSuccessor(&newNode)
 		node = &newNode
 		pos++
 	}
 	if pos < length {
-		inserted := TNode{element: seq[pos], prev: node, sequence: seq[pos+1:]}
-		newNode := TNode{element: nodeSeq[pos], prev: node, sequence: nodeSeq[pos+1:]}
-		newNode.end = isEnd || newNode.end
-		newNode.pairs = tempPairs
+		inserted := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
+		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
+		newNode.End = isEnd || newNode.End
+		newNode.Pairs = tempPairs
 		node.addSuccessor(&newNode)
 		node.addSuccessor(&inserted)
 		return &inserted
 	} else if pos < len(nodeSeq) {
-		newNode := TNode{element: nodeSeq[pos], prev: node, sequence: nodeSeq[pos+1:]}
-		newNode.end = isEnd || newNode.end
-		newNode.pairs = tempPairs
+		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
+		newNode.End = isEnd || newNode.End
+		newNode.Pairs = tempPairs
 		node.addSuccessor(&newNode)
 		return node
 	} else if pos < len(seq) {
-		newNode := TNode{element: seq[pos], prev: node, sequence: seq[pos+1:]}
-		node.end = isEnd || node.end
-		node.pairs = tempPairs
+		newNode := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
+		node.End = isEnd || node.End
+		node.Pairs = tempPairs
 		node.addSuccessor(&newNode)
 		return &newNode
 	}
@@ -216,14 +221,14 @@ func (t *Trie) reverseBranch(node *TNode) string {
 	var str []byte
 	origin := node
 	for node != nil {
-		str = append(str, node.element)
-		node = node.prev
+		str = append(str, node.Element)
+		node = node.Prev
 	}
 
 	for i, j := 0, len(str)-1; i < j; i, j = i+1, j-1 {
 		str[i], str[j] = str[j], str[i]
 	}
-	str = append(str, origin.sequence[:]...)
+	str = append(str, origin.Sequence[:]...)
 	return string(str)
 }
 
@@ -231,14 +236,14 @@ func (t *Trie) reverseBranchLower(node *TNode) string {
 	var str []byte
 	origin := node
 	for node != nil {
-		str = append(str, node.element)
-		node = node.prev
+		str = append(str, node.Element)
+		node = node.Prev
 	}
 
 	for i, j := 0, len(str)-1; i < j; i, j = i+1, j-1 {
 		str[i], str[j] = str[j], str[i]
 	}
-	str = append(str, origin.sequence[:]...)
+	str = append(str, origin.Sequence[:]...)
 	return strings.ToLower(string(str))
 }
 

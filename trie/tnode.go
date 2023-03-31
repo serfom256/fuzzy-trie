@@ -3,20 +3,20 @@ package trie
 import trieUtils "github.com/serfom256/fuzzy-trie/etc"
 
 type TNode struct {
-	element    byte
-	sequence   []byte
-	end        bool
-	prev       *TNode
-	successors []*TNode
-	pairs      [][]byte
+	Element    byte
+	Sequence   []byte
+	End        bool
+	Prev       *TNode
+	Successors []*TNode
+	Pairs      [][]byte
 }
 
 func (t *TNode) findSuccessor(b byte) *TNode {
-	if t.successors == nil {
+	if t.Successors == nil {
 		return nil
 	}
-	for _, e := range t.successors {
-		if e.element == b {
+	for _, e := range t.Successors {
+		if e.Element == b {
 			return e
 		}
 	}
@@ -24,34 +24,34 @@ func (t *TNode) findSuccessor(b byte) *TNode {
 }
 
 func (t *TNode) addSuccessor(node *TNode) {
-	if t.successors == nil {
-		t.successors = []*TNode{}
+	if t.Successors == nil {
+		t.Successors = []*TNode{}
 	}
-	t.successors = append(t.successors, node)
+	t.Successors = append(t.Successors, node)
 }
 
 func (t *TNode) addPairs(pairs [][]byte) {
-	if t.pairs == nil {
-		t.pairs = [][]byte{}
+	if t.Pairs == nil {
+		t.Pairs = [][]byte{}
 	}
-	t.pairs = append(t.pairs, pairs...)
+	t.Pairs = append(t.Pairs, pairs...)
 }
 
 func (t *TNode) addPair(pair []byte) {
-	if t.pairs == nil {
-		t.pairs = [][]byte{}
+	if t.Pairs == nil {
+		t.Pairs = [][]byte{}
 	}
-	t.pairs = append(t.pairs, pair)
+	t.Pairs = append(t.Pairs, pair)
 }
 
 func (t *TNode) isEmpty() bool {
-	return t.sequence == nil || len(t.sequence) == 0
+	return t.Sequence == nil || len(t.Sequence) == 0
 }
 
 func (t *TNode) get(b byte) (*TNode, bool) {
 	bt := int(b)
-	for _, j := range t.successors {
-		if j.element == b || trieUtils.AbsInt(int(j.element)-bt) == 32 {
+	for _, j := range t.Successors {
+		if j.Element == b || trieUtils.AbsInt(int(j.Element)-bt) == 32 {
 			return j, true
 		}
 	}
@@ -59,9 +59,9 @@ func (t *TNode) get(b byte) (*TNode, bool) {
 }
 
 func (t *TNode) removeSuccessor(node *TNode) {
-	for i, element := range t.successors {
+	for i, element := range t.Successors {
 		if element == node {
-			t.successors = removeElement(i, t.successors)
+			t.Successors = removeElement(i, t.Successors)
 			return
 		}
 	}

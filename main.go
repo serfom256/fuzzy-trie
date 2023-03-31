@@ -24,12 +24,15 @@ func main() {
 	start(*fuzzyTrie)
 }
 
-func search(query string, f func(string, int, int) []trie.Result) {
+func search(query string, f func(string, int, int, trie.OnFindFunction) []trie.Result) {
 	updateConfig()
 	dist := config.Trie.Search.Distance
 	fetchSize := config.Trie.Search.Fetch
 	t1 := time.Now()
-	result := f(query, dist, fetchSize)
+	result := f(query, dist, fetchSize, func(data trie.SearchData, node trie.TNode) error {
+		fmt.Println(data)
+		return nil
+	})
 	for _, j := range result {
 		fmt.Println(j.Key, j.Value)
 		fmt.Println()
@@ -74,7 +77,6 @@ func readDir(path string, t *trie.Trie) {
 			}
 			// readFile(path, t)
 			t.Add(info.Name(), path)
-			t.Add(info.ModTime().String(), path)
 			return nil
 		})
 	if err != nil {
