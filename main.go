@@ -30,7 +30,6 @@ func search(query string, f func(string, int, int, trie.OnFindFunction) []trie.R
 	fetchSize := config.Trie.Search.Fetch
 	t1 := time.Now()
 	result := f(query, dist, fetchSize, func(data trie.SearchData, node trie.TNode) error {
-		fmt.Println(data)
 		return nil
 	})
 	for _, j := range result {
