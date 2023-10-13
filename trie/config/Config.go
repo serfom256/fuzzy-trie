@@ -1,4 +1,4 @@
-package etc
+package config
 
 type Config struct {
 	Trie struct {

@@ -1,23 +1,27 @@
-package trie
+package core
 
 import (
-	"github.com/agnivade/levenshtein"
-	trieUtils "github.com/serfom256/fuzzy-trie/etc"
 	"math"
 	"reflect"
 	"strings"
 )
 
 type Trie struct {
-	size      int
-	root      *TNode
-	rootNodes map[byte]*TNode
+	size       int
+	root       *TNode
+	rootNodes  map[byte]*RootNode
+	serializer *Serializer
+}
+
+type RootNode struct {
+	node       *TNode
+	branchSize int
 }
 
 type OnFindFunction func(data SearchData, node TNode) error
 
 const (
-	suffixRegex = '*'
+	ancestorDistance int = 7
 )
 
 // Add Appends a pair of key and value to map
@@ -25,28 +29,84 @@ func (t *Trie) Add(key string, value string) {
 	if !checkConstraints(&key) {
 		return
 	}
-	keyNode := t.addSequence(&key)
+	keyNode := t.addBranch(&key)
+
 	if !keyNode.End {
 		t.size++
 	}
-	keyNode.addPair([]byte(value))
+	keyNode.AddPair([]byte(value))
 	keyNode.End = true
+
+	//ancestor := keyNode.getAncestorOnDistance(ancestorDistance)
+	//if ancestor != nil && len(key) > ancestorDistance {
+	//	t.serializer.MarkNodeToBeSerialized(ancestor)
+	//}
+}
+
+func (t *Trie) getNodeToSerialization(node *TNode, size int) *TNode {
+	if size < ancestorDistance {
+		return nil
+	}
+	for size > ancestorDistance {
+		node = node.Prev
+		size--
+	}
+	return node
+}
+
+func (t *Trie) Delete(key string) []string {
+	node := t.findNode(key)
+	if node == nil {
+		return nil
+	}
+	node.End = false
+
+	result := make([]string, len(node.Pairs))
+	for i, val := range node.Pairs {
+		result[i] = string(val[:])
+	}
+
+	return result
+}
+
+func (t *Trie) cutBranch(node *TNode) {
+	if node.Successors == nil || len(node.Successors) == 0 {
+		for node.Prev != nil && len(node.Prev.Successors) == 1 && !node.Prev.End {
+			node = node.Prev
+		}
+		if node.Prev != nil {
+			node.Prev.RemoveSuccessor(node, t.serializer)
+			node.Prev = nil
+		} else {
+			delete(t.rootNodes, node.Element)
+			t.root.RemoveSuccessor(node, t.serializer)
+		}
+	}
+}
+func (t *Trie) findNode(key string) *TNode {
+	curr := t.root
+	for i := 0; i < len(key); i++ {
+		curr = curr.FindSuccessor(key[i], t.serializer)
+		if curr == nil {
+			return nil
+		}
+	}
+	return curr
 }
 
 // Search returns result founded by the specified key
 func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunction) []Result {
+	println(t.serializer.serialized, t.serializer.deserialized)
 	result := SearchData{Count: cnt, Typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}, onFind: onFind}
 	t.lookup(t.root, 0, distance, &result)
 	return result.founded
 }
 
 func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
-	hash := ((pos + 1) << data.Typos) | dist
-	if dist < 0 || curr == nil || data.isFounded() || data.nodeCache[curr] == hash {
+	if checkHashExistence(data, pos, dist, curr) {
 		return
 	}
-	data.nodeCache[curr] = hash
-	if pos < len(data.toSearch) && data.toSearch[pos] == suffixRegex {
+	if shouldCollectSuffix(data.toSearch, pos) {
 		t.collectSuffixes(curr, data)
 		return
 	}
@@ -57,7 +117,7 @@ func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
 		return
 	}
 	if pos < len(data.toSearch) {
-		if next, contains := curr.get(data.toSearch[pos]); contains {
+		if next, contains := curr.Get(data.toSearch[pos], t.serializer); contains {
 			t.lookup(next, pos+1, dist, data)
 		}
 	}
@@ -111,15 +171,18 @@ func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
 	}
 }
 
-func (t *Trie) addSequence(key *string) *TNode {
+func (t *Trie) addBranch(key *string) *TNode {
 	charArray := []byte(*key)
-	curr := t.rootNodes[charArray[0]]
-	if curr == nil {
+	rootNode := t.rootNodes[charArray[0]]
+
+	if rootNode == nil {
 		return t.insertToRoot(charArray)
 	}
+	curr := rootNode.node
+
 	for i := 1; i < len(charArray); i++ {
 		c := charArray[i]
-		next := curr.findSuccessor(c)
+		next := curr.FindSuccessor(c, t.serializer)
 		if next == nil {
 			seq := charArray[i:]
 			if reflect.DeepEqual(seq, curr.Sequence) {
@@ -133,46 +196,31 @@ func (t *Trie) addSequence(key *string) *TNode {
 }
 
 func (t *Trie) splitTree(node *TNode) *TNode {
-	if node.isEmpty() {
+	if node.IsEmpty() {
 		return node
 	}
 	prev := node.Prev
 	if prev == nil {
 		prev = t.root
 	}
-	prev.removeSuccessor(node)
+	prev.RemoveSuccessor(node, t.serializer)
 	curr := TNode{Element: node.Element, Prev: prev}
-	prev.addSuccessor(&curr)
+	prev.AddSuccessor(&curr, t.serializer)
 	toNext := TNode{Element: node.Sequence[0], Prev: &curr, Sequence: node.Sequence[1:]}
 	toNext.End = node.End
 	toNext.Pairs = node.Pairs
 	node.Pairs = nil
-	curr.addSuccessor(&toNext)
+	curr.AddSuccessor(&toNext, t.serializer)
 	if prev == t.root {
-		t.rootNodes[node.Element] = &curr
+		t.rootNodes[node.Element] = &RootNode{node: &curr}
 	}
 	return &curr
-}
-
-func (t *Trie) insertToRoot(key []byte) *TNode {
-	first := key[0]
-	rootNode := TNode{Element: first, Sequence: key[1:], End: false, Prev: nil}
-	t.rootNodes[first] = &rootNode
-	t.root.addSuccessor(&rootNode)
-	return &rootNode
-}
-
-func checkConstraints(key *string) bool {
-	if key == nil || len(*key) == 0 {
-		return false
-	}
-	return true
 }
 
 func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 	if node.Sequence == nil {
 		newNode := TNode{Element: seq[0], Prev: node, Sequence: seq[1:]}
-		node.addSuccessor(&newNode)
+		node.AddSuccessor(&newNode, t.serializer)
 		return &newNode
 	}
 	nodeSeq := node.Sequence
@@ -185,7 +233,7 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 	length := int(math.Min(float64(len(seq)), float64(len(nodeSeq))))
 	for pos < length && seq[pos] == nodeSeq[pos] {
 		newNode := TNode{Element: seq[pos], Prev: node}
-		node.addSuccessor(&newNode)
+		node.AddSuccessor(&newNode, t.serializer)
 		node = &newNode
 		pos++
 	}
@@ -194,27 +242,42 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
 		newNode.End = isEnd || newNode.End
 		newNode.Pairs = tempPairs
-		node.addSuccessor(&newNode)
-		node.addSuccessor(&inserted)
+		node.AddSuccessor(&newNode, t.serializer)
+		node.AddSuccessor(&inserted, t.serializer)
 		return &inserted
 	} else if pos < len(nodeSeq) {
 		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
 		newNode.End = isEnd || newNode.End
 		newNode.Pairs = tempPairs
-		node.addSuccessor(&newNode)
+		node.AddSuccessor(&newNode, t.serializer)
 		return node
 	} else if pos < len(seq) {
 		newNode := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
 		node.End = isEnd || node.End
 		node.Pairs = tempPairs
-		node.addSuccessor(&newNode)
+		node.AddSuccessor(&newNode, t.serializer)
 		return &newNode
 	}
 	return node
 }
 
+func (t *Trie) insertToRoot(key []byte) *TNode {
+	first := key[0]
+	rootNode := TNode{Element: first, Sequence: key[1:], End: false, Prev: nil}
+	t.rootNodes[first] = &RootNode{node: &rootNode, branchSize: 1}
+	t.root.AddSuccessor(&rootNode, t.serializer)
+	return &rootNode
+}
+
+func checkConstraints(key *string) bool {
+	if key == nil || len(*key) == 0 {
+		return false
+	}
+	return true
+}
+
 func isCharEquals(a byte, b byte) bool {
-	return trieUtils.AbsInt(int(a)-int(b)) == 32 || a == b
+	return absInt(int(a)-int(b)) == 32 || a == b
 }
 
 func (t *Trie) reverseBranch(node *TNode) string {
@@ -247,19 +310,13 @@ func (t *Trie) reverseBranchLower(node *TNode) string {
 	return strings.ToLower(string(str))
 }
 
-func isSame(s1 string, s2 string, distance int) bool {
-	return levenshtein.ComputeDistance(s1, s2) <= distance
-}
-
-func (t *Trie) Print() {
-
-}
-
 func (t *Trie) Size() int {
 	return t.size
 }
 
 func InitTrie() *Trie {
-	trie := Trie{size: 0, root: &TNode{}, rootNodes: make(map[byte]*TNode, 32)}
-	return &trie
+	serializer := Serializer{}
+	serializer.Init()
+	trie := &Trie{size: 0, root: &TNode{}, rootNodes: make(map[byte]*RootNode, 32), serializer: &serializer}
+	return trie
 }

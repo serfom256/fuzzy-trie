@@ -1,3 +1,5 @@
 .idea
 go.sum
-trie.exe
+/bin/trie.exe
+/config.yaml
+/cache

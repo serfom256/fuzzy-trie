@@ -1,5 +1,0 @@
-trie:
-  search:
-    distance: 2 # fuzzy search distance
-    size: 10 # maximum search size
-paths: [ ] # path to index e.g "/home/user/"
