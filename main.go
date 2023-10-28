@@ -8,6 +8,7 @@ import (
 	"github.com/serfom256/fuzzy-trie/trie/core"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -21,7 +22,7 @@ func main() {
 	for _, j := range context.Paths {
 		trie.ReadDir(j, fuzzyTrie)
 	}
-	start(*fuzzyTrie)
+	start(fuzzyTrie)
 }
 
 func search(query string, f func(string, int, int, core.OnFindFunction) []core.Result) {
@@ -39,7 +40,8 @@ func search(query string, f func(string, int, int, core.OnFindFunction) []core.R
 	fmt.Println("Search time:", time.Now().Sub(t1))
 }
 
-func start(fuzzyTrie core.Trie) {
+func start(fuzzyTrie *core.Trie) {
+	debug.SetGCPercent(100)
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("\n\nIndexed total: ", fuzzyTrie.Size())
 	for {

@@ -83,6 +83,17 @@ func (t *TNode) getAncestorOnDistance(distance int) *TNode {
 	return node
 }
 
+func (t *TNode) getPreviousSuccessorsSize() int {
+	node := t
+	size := 0
+
+	for node != nil {
+		size += len(node.Successors)
+		node = node.Prev
+	}
+	return size
+}
+
 func (t *TNode) prepareToSerialization() {
 	for _, successor := range t.Successors {
 		successor.Prev = nil
@@ -106,7 +117,7 @@ func removeElement(pos int, elements []*TNode) []*TNode {
 func (t *TNode) restoreBranchIfNecessary(serializer *Serializer) {
 	if t.SerializationId != nil {
 		serializer.deserialized++
-		//t.Successors = serializer.deserializeNode(t)
+		t.Successors = serializer.DeserializeNode(t)
 		t.restoreAfterSerialization()
 		t.SerializationId = nil
 	}

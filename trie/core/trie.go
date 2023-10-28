@@ -4,6 +4,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 type Trie struct {
@@ -11,43 +12,63 @@ type Trie struct {
 	root       *TNode
 	rootNodes  map[byte]*RootNode
 	serializer *Serializer
+	lock       sync.RWMutex
+	a          int
 }
 
 type RootNode struct {
-	node       *TNode
-	branchSize int
+	node *TNode
 }
 
 type OnFindFunction func(data SearchData, node TNode) error
 
 const (
-	ancestorDistance int = 7
+	serializationThreshold int = 250
+	ancestorDistance       int = 5
+	rootPadding            int = 2
 )
 
 // Add Appends a pair of key and value to map
 func (t *Trie) Add(key string, value string) {
+	t.lock.Lock()
+
 	if !checkConstraints(&key) {
 		return
 	}
+
 	keyNode := t.addBranch(&key)
 
 	if !keyNode.End {
 		t.size++
-	}
-	keyNode.AddPair([]byte(value))
-	keyNode.End = true
 
-	//ancestor := keyNode.getAncestorOnDistance(ancestorDistance)
-	//if ancestor != nil && len(key) > ancestorDistance {
-	//	t.serializer.MarkNodeToBeSerialized(ancestor)
-	//}
+		if len(key) > ancestorDistance+rootPadding {
+			ancestor := keyNode.getAncestorOnDistance(ancestorDistance)
+
+			rootSuccSize := ancestor.getPreviousSuccessorsSize()
+
+			if rootSuccSize > serializationThreshold && ancestor.SerializationId == nil {
+				t.a++
+				go t.serializer.MarkNodeToBeSerialized(ancestor, &t.lock)
+			}
+
+			if t.size%10000 == 0 {
+				println(t.a, t.size)
+			}
+		}
+
+		keyNode.End = true
+	}
+
+	keyNode.AddPair([]byte(value))
+
+	t.lock.Unlock()
 }
 
 func (t *Trie) getNodeToSerialization(node *TNode, size int) *TNode {
-	if size < ancestorDistance {
+	if size < serializationThreshold {
 		return nil
 	}
-	for size > ancestorDistance {
+	for size > serializationThreshold {
 		node = node.Prev
 		size--
 	}
@@ -55,6 +76,8 @@ func (t *Trie) getNodeToSerialization(node *TNode, size int) *TNode {
 }
 
 func (t *Trie) Delete(key string) []string {
+	t.lock.Lock()
+
 	node := t.findNode(key)
 	if node == nil {
 		return nil
@@ -66,6 +89,7 @@ func (t *Trie) Delete(key string) []string {
 		result[i] = string(val[:])
 	}
 
+	t.lock.Unlock()
 	return result
 }
 
@@ -96,9 +120,12 @@ func (t *Trie) findNode(key string) *TNode {
 
 // Search returns result founded by the specified key
 func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunction) []Result {
-	println(t.serializer.serialized, t.serializer.deserialized)
+	t.lock.Lock()
+
 	result := SearchData{Count: cnt, Typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}, onFind: onFind}
 	t.lookup(t.root, 0, distance, &result)
+
+	t.lock.Unlock()
 	return result.founded
 }
 
@@ -264,7 +291,7 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 func (t *Trie) insertToRoot(key []byte) *TNode {
 	first := key[0]
 	rootNode := TNode{Element: first, Sequence: key[1:], End: false, Prev: nil}
-	t.rootNodes[first] = &RootNode{node: &rootNode, branchSize: 1}
+	t.rootNodes[first] = &RootNode{node: &rootNode}
 	t.root.AddSuccessor(&rootNode, t.serializer)
 	return &rootNode
 }
