@@ -1,17 +1,14 @@
 package core
 
 import (
-	"bytes"
-	"encoding/gob"
-	randomGenerator "github.com/serfom256/fuzzy-trie/trie/core/utils"
-	"math/rand"
+	"encoding/json"
+	"log"
 	"os"
-	"sync"
+
+	randomGenerator "github.com/serfom256/fuzzy-trie/trie/core/utils"
 )
 
 type Serializer struct {
-	serialized   int
-	deserialized int
 }
 
 const path = "cache/"
@@ -19,59 +16,47 @@ const path = "cache/"
 func (s *Serializer) DeserializeNode(node *TNode) []*TNode {
 
 	var successors []*TNode
-	b := bytes.Buffer{}
 
 	file, err := os.ReadFile(path + (*node.SerializationId))
-	if err != nil {
-		panic(err)
+	for err != nil {
+		log.Println(err.Error())
+		file, err = os.ReadFile(path + (*node.SerializationId))
 	}
 
-	b.Write(file)
-	d := gob.NewDecoder(&b)
-
-	err = d.Decode(&successors)
+	err = json.Unmarshal(file, &successors)
 	if err != nil {
 		panic(err)
 	}
 
 	err = os.Remove(path + (*node.SerializationId))
-	if err != nil {
-		panic(err)
+	for err != nil {
+		log.Println(err.Error())
+		err = os.Remove(path + (*node.SerializationId))
 	}
 
 	return successors
 }
 
-func (s *Serializer) MarkNodeToBeSerialized(node *TNode, lock *sync.RWMutex) {
-	if rand.Intn(3) == 0 && node.SerializationId != nil {
+func (s *Serializer) MarkNodeToBeSerialized(node *TNode) {
+	if node.SerializationId != nil {
 		return
 	}
 
-	lock.Lock()
-
-	if node.SerializationId == nil {
-		uid := randomGenerator.GenerateUUID(6)
-		node.SerializationId = &uid
-	}
-	s.serialized++
+	uid := randomGenerator.GenerateUUID(6)
+	node.SerializationId = &uid
 
 	s.serializeNode(node)
-
-	lock.Unlock()
 }
 
 func (s *Serializer) serializeNode(node *TNode) {
-	var buf bytes.Buffer
-	encoder := gob.NewEncoder(&buf)
-
 	node.prepareToSerialization()
 
-	err := encoder.Encode(node.Successors)
-	if err != nil {
-		panic(err)
-	}
+	data, sErr := json.Marshal(&node.Successors)
+	if sErr != nil {
+		panic("Cannot serialize node")
 
-	err = os.WriteFile(path+(*node.SerializationId), buf.Bytes(), 0644)
+	}
+	err := os.WriteFile(path+(*node.SerializationId), data, 0644)
 	if err != nil {
 		panic(err)
 	}

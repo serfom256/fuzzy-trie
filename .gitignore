@@ -3,3 +3,4 @@ go.sum
 /bin/trie.exe
 /config.yaml
 /cache
+.vscode

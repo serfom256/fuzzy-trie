@@ -12,8 +12,8 @@ type Trie struct {
 	root       *TNode
 	rootNodes  map[byte]*RootNode
 	serializer *Serializer
+	scheduler  *Scheduler
 	lock       sync.RWMutex
-	a          int
 }
 
 type RootNode struct {
@@ -23,9 +23,9 @@ type RootNode struct {
 type OnFindFunction func(data SearchData, node TNode) error
 
 const (
-	serializationThreshold int = 250
-	ancestorDistance       int = 5
-	rootPadding            int = 2
+	branchSerializationThreshold int     = 15
+	rootPadding                  int     = 10
+	rootPaddingFactor            float32 = 0.5
 )
 
 // Add Appends a pair of key and value to map
@@ -39,40 +39,29 @@ func (t *Trie) Add(key string, value string) {
 	keyNode := t.addBranch(&key)
 
 	if !keyNode.End {
+		keyNode.End = true
+
 		t.size++
+		keyLen := len(key)
 
-		if len(key) > ancestorDistance+rootPadding {
-			ancestor := keyNode.getAncestorOnDistance(ancestorDistance)
+		if keyLen-len(keyNode.Sequence) > rootPadding {
 
-			rootSuccSize := ancestor.getPreviousSuccessorsSize()
+			ancestor := keyNode.getAncestorOnDistance(keyLen - int(rootPaddingFactor*float32(keyLen)))
 
-			if rootSuccSize > serializationThreshold && ancestor.SerializationId == nil {
-				t.a++
-				go t.serializer.MarkNodeToBeSerialized(ancestor, &t.lock)
-			}
-
-			if t.size%10000 == 0 {
-				println(t.a, t.size)
+			if ancestor != nil && (ancestor.SuccessorsCount > branchSerializationThreshold) && ancestor != t.root {
+				t.serializer.MarkNodeToBeSerialized(ancestor)
+				println(key)
 			}
 		}
+		if t.size%10000 == 0 {
+			println(t.size)
+		}
 
-		keyNode.End = true
 	}
 
-	keyNode.AddPair([]byte(value))
+	// keyNode.AddPair([]byte(value), t.serializer)
 
 	t.lock.Unlock()
-}
-
-func (t *Trie) getNodeToSerialization(node *TNode, size int) *TNode {
-	if size < serializationThreshold {
-		return nil
-	}
-	for size > serializationThreshold {
-		node = node.Prev
-		size--
-	}
-	return node
 }
 
 func (t *Trie) Delete(key string) []string {
@@ -93,29 +82,38 @@ func (t *Trie) Delete(key string) []string {
 	return result
 }
 
-func (t *Trie) cutBranch(node *TNode) {
-	if node.Successors == nil || len(node.Successors) == 0 {
-		for node.Prev != nil && len(node.Prev.Successors) == 1 && !node.Prev.End {
-			node = node.Prev
-		}
-		if node.Prev != nil {
-			node.Prev.RemoveSuccessor(node, t.serializer)
-			node.Prev = nil
-		} else {
-			delete(t.rootNodes, node.Element)
-			t.root.RemoveSuccessor(node, t.serializer)
-		}
-	}
-}
+// TODO implement deletion
+// func (t *Trie) cutBranch(node *TNode) {
+
+// 	successors := node.GetSuccessors(t.serializer)
+
+// 	if successors == nil || len(successors) == 0 {
+// 		for node.Prev != nil && len(node.Prev.GetSuccessors(t.serializer)) == 1 && !node.Prev.End {
+// 			node = node.Prev
+// 		}
+// 		if node.Prev != nil {
+// 			node.Prev.RemoveSuccessor(node, t.serializer)
+// 			node.Prev = nil
+// 		} else {
+// 			delete(t.rootNodes, node.Element)
+// 			t.root.RemoveSuccessor(node, t.serializer)
+// 		}
+// 	}
+// }
+
 func (t *Trie) findNode(key string) *TNode {
-	curr := t.root
+	current := t.root
 	for i := 0; i < len(key); i++ {
-		curr = curr.FindSuccessor(key[i], t.serializer)
-		if curr == nil {
+		prev := current
+		current = current.FindSuccessor(key[i], t.serializer)
+		if current == nil {
+			if string(prev.Sequence) == key[i:] {
+				return prev
+			}
 			return nil
 		}
 	}
-	return curr
+	return current
 }
 
 // Search returns result founded by the specified key
@@ -129,33 +127,38 @@ func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunct
 	return result.founded
 }
 
-func (t *Trie) lookup(curr *TNode, pos int, dist int, data *SearchData) {
-	if checkHashExistence(data, pos, dist, curr) {
+func (t *Trie) lookup(current *TNode, pos int, dist int, data *SearchData) {
+	if checkHashExistence(data, pos, dist, current) {
 		return
 	}
 	if shouldCollectSuffix(data.toSearch, pos) {
-		t.collectSuffixes(curr, data)
+		t.collectSuffixes(current, data)
 		return
 	}
-	if curr.End && isSame(t.reverseBranchLower(curr), data.toSearch, data.Typos) {
-		t.collectPairs(curr, data)
+	if current.End && isSame(t.reverseBranchLower(current), data.toSearch, data.Typos) {
+		t.collectPairs(current, data)
 	}
-	if curr.Successors == nil {
+
+	successors := current.GetSuccessors(t.serializer)
+
+	if successors == nil {
 		return
 	}
+
 	if pos < len(data.toSearch) {
-		if next, contains := curr.Get(data.toSearch[pos], t.serializer); contains {
+		if next, contains := current.Get(data.toSearch[pos], t.serializer); contains {
 			t.lookup(next, pos+1, dist, data)
 		}
 	}
-	for _, node := range curr.Successors {
+
+	for _, node := range successors {
 		if pos < len(data.toSearch) && isCharEquals(node.Element, data.toSearch[pos]) {
 			t.lookup(node, pos+1, dist, data)
 		} else {
 			t.lookup(node, pos+1, dist-1, data)
 		}
 		t.lookup(node, pos, dist-1, data)
-		t.lookup(curr, pos+1, dist-1, data)
+		t.lookup(current, pos+1, dist-1, data)
 		if data.isFounded() {
 			return
 		}
@@ -187,10 +190,13 @@ func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
 	if node.End {
 		t.collectPairs(node, data)
 	}
-	if node.Successors == nil {
+
+	successors := node.GetSuccessors(t.serializer)
+
+	if successors == nil {
 		return
 	}
-	for _, j := range node.Successors {
+	for _, j := range successors {
 		if data.isFounded() {
 			return
 		}
@@ -205,39 +211,48 @@ func (t *Trie) addBranch(key *string) *TNode {
 	if rootNode == nil {
 		return t.insertToRoot(charArray)
 	}
-	curr := rootNode.node
+	current := rootNode.node
 
 	for i := 1; i < len(charArray); i++ {
 		c := charArray[i]
-		next := curr.FindSuccessor(c, t.serializer)
+		next := current.FindSuccessor(c, t.serializer)
 		if next == nil {
 			seq := charArray[i:]
-			if reflect.DeepEqual(seq, curr.Sequence) {
-				return curr
+			if reflect.DeepEqual(seq, current.Sequence) {
+				return current
 			}
-			return t.buildTree(curr, seq)
+			return t.buildTree(current, seq)
 		}
-		curr = next
+		next.Prev = current
+		current = next
 	}
-	return t.splitTree(curr)
+	return t.splitTree(current)
 }
 
 func (t *Trie) splitTree(node *TNode) *TNode {
-	if node.IsEmpty() {
+
+	if node.IsEmpty(t.serializer) {
 		return node
 	}
+
 	prev := node.Prev
 	if prev == nil {
 		prev = t.root
 	}
+
 	prev.RemoveSuccessor(node, t.serializer)
+
 	curr := TNode{Element: node.Element, Prev: prev}
 	prev.AddSuccessor(&curr, t.serializer)
-	toNext := TNode{Element: node.Sequence[0], Prev: &curr, Sequence: node.Sequence[1:]}
-	toNext.End = node.End
-	toNext.Pairs = node.Pairs
+
+	nextNode := TNode{Element: node.Sequence[0], Prev: &curr, Sequence: node.Sequence[1:]}
+	nextNode.End = node.End
+	nextNode.Pairs = node.Pairs
+
 	node.Pairs = nil
-	curr.AddSuccessor(&toNext, t.serializer)
+	//curr.SuccessorsCount = node.SuccessorsCount TODO explore this way
+	curr.AddSuccessor(&nextNode, t.serializer)
+
 	if prev == t.root {
 		t.rootNodes[node.Element] = &RootNode{node: &curr}
 	}
@@ -250,14 +265,19 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 		node.AddSuccessor(&newNode, t.serializer)
 		return &newNode
 	}
+
 	nodeSeq := node.Sequence
-	node.Sequence = nil
 	isEnd := node.End
-	node.End = false
 	tempPairs := node.Pairs
+
+	node.Sequence = nil
+	node.End = false
 	node.Pairs = nil
+	node.SuccessorsCount = 0
 	pos := 0
+
 	length := int(math.Min(float64(len(seq)), float64(len(nodeSeq))))
+
 	for pos < length && seq[pos] == nodeSeq[pos] {
 		newNode := TNode{Element: seq[pos], Prev: node}
 		node.AddSuccessor(&newNode, t.serializer)
@@ -265,23 +285,27 @@ func (t *Trie) buildTree(node *TNode, seq []byte) *TNode {
 		pos++
 	}
 	if pos < length {
-		inserted := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
-		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
-		newNode.End = isEnd || newNode.End
-		newNode.Pairs = tempPairs
-		node.AddSuccessor(&newNode, t.serializer)
-		node.AddSuccessor(&inserted, t.serializer)
-		return &inserted
+		successor1 := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
+		successor2 := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
+
+		successor2.End = isEnd || successor2.End
+		successor2.Pairs = tempPairs
+
+		node.AddSuccessor(&successor2, t.serializer)
+		node.AddSuccessor(&successor1, t.serializer)
+		return &successor1
 	} else if pos < len(nodeSeq) {
-		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:]}
+		newNode := TNode{Element: nodeSeq[pos], Prev: node, Sequence: nodeSeq[pos+1:], SuccessorsCount: node.SuccessorsCount}
 		newNode.End = isEnd || newNode.End
 		newNode.Pairs = tempPairs
+
 		node.AddSuccessor(&newNode, t.serializer)
 		return node
 	} else if pos < len(seq) {
 		newNode := TNode{Element: seq[pos], Prev: node, Sequence: seq[pos+1:]}
 		node.End = isEnd || node.End
 		node.Pairs = tempPairs
+
 		node.AddSuccessor(&newNode, t.serializer)
 		return &newNode
 	}
@@ -341,9 +365,16 @@ func (t *Trie) Size() int {
 	return t.size
 }
 
-func InitTrie() *Trie {
+func New() *Trie {
 	serializer := Serializer{}
 	serializer.Init()
-	trie := &Trie{size: 0, root: &TNode{}, rootNodes: make(map[byte]*RootNode, 32), serializer: &serializer}
+
+	trie := &Trie{
+		size:       0,
+		root:       &TNode{},
+		rootNodes:  make(map[byte]*RootNode, 32),
+		serializer: &serializer,
+		scheduler:  NewScheduler(),
+	}
 	return trie
 }

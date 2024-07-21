@@ -2,23 +2,23 @@ package trie
 
 import (
 	"bufio"
-	"github.com/serfom256/fuzzy-trie/trie/core"
 	"os"
 	"path/filepath"
+
+	"github.com/serfom256/fuzzy-trie/trie/core"
 )
 
 func ReadDir(path string, t *core.Trie) {
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return nil
+				panic(err)
 			}
 			t.Add(info.Name(), path)
-			t.Add(path, path)
 			return nil
 		})
 	if err != nil {
-		return
+		panic(err)
 	}
 }
 

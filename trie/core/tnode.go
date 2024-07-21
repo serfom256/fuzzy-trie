@@ -1,13 +1,14 @@
 package core
 
 type TNode struct {
-	Element         byte
-	Sequence        []byte
-	End             bool
-	SerializationId *string
-	Prev            *TNode
-	Successors      []*TNode
-	Pairs           [][]byte
+	Element         byte     `json:"0"`
+	Sequence        []byte   `json:"1"`
+	End             bool     `json:"2"`
+	SerializationId *string  `json:"3"`
+	Prev            *TNode   `json:"-"`
+	Successors      []*TNode `json:"4"`
+	Pairs           [][]byte `json:"5"`
+	SuccessorsCount int      `json:"6"`
 }
 
 func (t *TNode) FindSuccessor(b byte, serializer *Serializer) *TNode {
@@ -31,27 +32,40 @@ func (t *TNode) AddSuccessor(node *TNode, serializer *Serializer) {
 		t.Successors = []*TNode{}
 	}
 	t.Successors = append(t.Successors, node)
+	t.SuccessorsCount++
+	if t.Prev != nil {
+		t.Prev.SuccessorsCount++
+	}
 }
 
-func (t *TNode) AddPairs(pairs [][]byte) {
+func (t *TNode) GetSuccessors(serializer *Serializer) []*TNode {
+	t.restoreBranchIfNecessary(serializer)
+	return t.Successors
+}
+
+func (t *TNode) AddPairs(pairs [][]byte, serializer *Serializer) {
+	t.restoreBranchIfNecessary(serializer)
 	if t.Pairs == nil {
 		t.Pairs = [][]byte{}
 	}
 	t.Pairs = append(t.Pairs, pairs...)
 }
 
-func (t *TNode) AddPair(pair []byte) {
+func (t *TNode) AddPair(pair []byte, serializer *Serializer) {
+	t.restoreBranchIfNecessary(serializer)
 	if t.Pairs == nil {
 		t.Pairs = [][]byte{}
 	}
 	t.Pairs = append(t.Pairs, pair)
 }
 
-func (t *TNode) IsEmpty() bool {
+func (t *TNode) IsEmpty(serializer *Serializer) bool {
+	t.restoreBranchIfNecessary(serializer)
 	return t.Sequence == nil || len(t.Sequence) == 0
 }
 
 func (t *TNode) Get(b byte, serializer *Serializer) (*TNode, bool) {
+
 	t.restoreBranchIfNecessary(serializer)
 
 	bt := int(b)
@@ -68,7 +82,11 @@ func (t *TNode) RemoveSuccessor(node *TNode, serializer *Serializer) {
 
 	for i, element := range t.Successors {
 		if element == node {
-			t.Successors = removeElement(i, t.Successors)
+			t.Successors = t.removeElement(i, t.Successors, serializer)
+			t.SuccessorsCount--
+			if t.Prev != nil {
+				t.Prev.SuccessorsCount--
+			}
 			return
 		}
 	}
@@ -81,17 +99,6 @@ func (t *TNode) getAncestorOnDistance(distance int) *TNode {
 		distance--
 	}
 	return node
-}
-
-func (t *TNode) getPreviousSuccessorsSize() int {
-	node := t
-	size := 0
-
-	for node != nil {
-		size += len(node.Successors)
-		node = node.Prev
-	}
-	return size
 }
 
 func (t *TNode) prepareToSerialization() {
@@ -108,7 +115,8 @@ func (t *TNode) restoreAfterSerialization() {
 	}
 }
 
-func removeElement(pos int, elements []*TNode) []*TNode {
+func (t *TNode) removeElement(pos int, elements []*TNode, serializer *Serializer) []*TNode {
+	t.restoreBranchIfNecessary(serializer)
 	length := len(elements)
 	elements[pos] = elements[length-1]
 	return elements[:length-1]
@@ -116,7 +124,6 @@ func removeElement(pos int, elements []*TNode) []*TNode {
 
 func (t *TNode) restoreBranchIfNecessary(serializer *Serializer) {
 	if t.SerializationId != nil {
-		serializer.deserialized++
 		t.Successors = serializer.DeserializeNode(t)
 		t.restoreAfterSerialization()
 		t.SerializationId = nil

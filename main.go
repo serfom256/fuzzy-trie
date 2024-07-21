@@ -3,14 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/serfom256/fuzzy-trie/trie"
-	"github.com/serfom256/fuzzy-trie/trie/config"
-	"github.com/serfom256/fuzzy-trie/trie/core"
 	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/serfom256/fuzzy-trie/trie"
+	"github.com/serfom256/fuzzy-trie/trie/config"
+	"github.com/serfom256/fuzzy-trie/trie/core"
 )
 
 var context config.Config
@@ -18,7 +19,8 @@ var context config.Config
 func main() {
 	context = config.ReadConfig("config.yaml")
 	printConfig()
-	fuzzyTrie := core.InitTrie()
+	fuzzyTrie := core.New()
+
 	for _, j := range context.Paths {
 		trie.ReadDir(j, fuzzyTrie)
 	}
@@ -28,7 +30,7 @@ func main() {
 func search(query string, f func(string, int, int, core.OnFindFunction) []core.Result) {
 	updateConfig()
 	dist := context.Trie.Search.Distance
-	fetchSize := context.Trie.Search.Fetch
+	fetchSize := 1
 	t1 := time.Now()
 	result := f(query, dist, fetchSize, func(data core.SearchData, node core.TNode) error {
 		return nil
@@ -48,7 +50,7 @@ func start(fuzzyTrie *core.Trie) {
 		fmt.Print("\nEnter to search: ")
 		text, _ := reader.ReadString('\n')
 		text = strings.Replace(text, "\n", "", -1)
-		search(text[:len(text)-1], fuzzyTrie.Search)
+		search(text, fuzzyTrie.Search)
 	}
 }
 
@@ -58,7 +60,7 @@ func printConfig() {
 	fmt.Println("\ttrie.search.fetch.size =>", context.Trie.Search.Fetch)
 	fmt.Println("\tpaths.to.scan =>", context.Paths)
 	fmt.Println()
-	fmt.Print("Indexing...")
+	fmt.Println("Indexing...")
 }
 
 func updateConfig() {
