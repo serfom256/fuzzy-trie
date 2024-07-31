@@ -4,23 +4,26 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-
-	randomGenerator "github.com/serfom256/fuzzy-trie/trie/core/utils"
+	"strconv"
 )
 
 type Serializer struct {
+	position int
 }
 
-const path = "cache/"
+const cachePath = "cache/"
+const fileMode = 0777
 
 func (s *Serializer) DeserializeNode(node *TNode) []*TNode {
 
 	var successors []*TNode
 
-	file, err := os.ReadFile(path + (*node.SerializationId))
+	filePath := getFilePath(node.SerializationId)
+
+	file, err := os.ReadFile(filePath)
 	for err != nil {
 		log.Println(err.Error())
-		file, err = os.ReadFile(path + (*node.SerializationId))
+		file, err = os.ReadFile(filePath)
 	}
 
 	err = json.Unmarshal(file, &successors)
@@ -28,13 +31,17 @@ func (s *Serializer) DeserializeNode(node *TNode) []*TNode {
 		panic(err)
 	}
 
-	err = os.Remove(path + (*node.SerializationId))
+	err = os.Remove(filePath)
 	for err != nil {
 		log.Println(err.Error())
-		err = os.Remove(path + (*node.SerializationId))
+		err = os.Remove(filePath)
 	}
 
 	return successors
+}
+
+func getFilePath(sId *int) string {
+	return cachePath + strconv.Itoa(*sId) + ".bin"
 }
 
 func (s *Serializer) MarkNodeToBeSerialized(node *TNode) {
@@ -42,8 +49,7 @@ func (s *Serializer) MarkNodeToBeSerialized(node *TNode) {
 		return
 	}
 
-	uid := randomGenerator.GenerateUUID(6)
-	node.SerializationId = &uid
+	node.SerializationId = s.nextUid()
 
 	s.serializeNode(node)
 }
@@ -56,7 +62,7 @@ func (s *Serializer) serializeNode(node *TNode) {
 		panic("Cannot serialize node")
 
 	}
-	err := os.WriteFile(path+(*node.SerializationId), data, 0644)
+	err := os.WriteFile(getFilePath(node.SerializationId), data, fileMode)
 	if err != nil {
 		panic(err)
 	}
@@ -65,5 +71,16 @@ func (s *Serializer) serializeNode(node *TNode) {
 }
 
 func (s *Serializer) Init() {
-	randomGenerator.Init()
+	err := os.Mkdir(cachePath, fileMode)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *Serializer) nextUid() *int {
+	position := s.position
+
+	s.position = s.position + 1
+	println(s.position)
+	return &position
 }

@@ -4,7 +4,7 @@ type TNode struct {
 	Element         byte     `json:"0"`
 	Sequence        []byte   `json:"1"`
 	End             bool     `json:"2"`
-	SerializationId *string  `json:"3"`
+	SerializationId *int     `json:"3"`
 	Prev            *TNode   `json:"-"`
 	Successors      []*TNode `json:"4"`
 	Pairs           [][]byte `json:"5"`
