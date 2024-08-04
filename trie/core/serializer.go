@@ -73,7 +73,7 @@ func (s *Serializer) serializeNode(node *TNode) {
 func (s *Serializer) Init() {
 	err := os.Mkdir(cachePath, fileMode)
 	if err != nil {
-		panic(err)
+		log.Println("Cannot create [cache] directory, probably this directory already exists")
 	}
 }
 
@@ -81,6 +81,5 @@ func (s *Serializer) nextUid() *int {
 	position := s.position
 
 	s.position = s.position + 1
-	println(s.position)
 	return &position
 }

@@ -16,7 +16,6 @@ func ReadDir(path string, t *core.Trie) {
 				log.Println(path, "permission denied")
 			} else {
 				t.Add(info.Name(), path)
-				// t.Add(path, info.Name())
 			}
 
 			return nil

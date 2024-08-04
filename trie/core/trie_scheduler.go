@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"log"
 	"runtime"
 	"time"
@@ -12,37 +11,41 @@ type Scheduler struct {
 	trie           *Trie
 }
 
-const serializationNodeAmount = 1000
+const (
+	serializationNodeAmount       = 1000
+	serializationCallDelayMinutes = 10
+)
 
 func (scheduler *Scheduler) persistsIfQueueIsFull() {
-	log.Println("Start scheduling...")
+	log.Println("\nStart scheduling...")
 	for {
 		time.Sleep(scheduler.schedulerDelay)
-		PrintMemUsage()
-		println("Start")
-		trieRoot := scheduler.trie.root
+
 		scheduler.trie.lock.Lock()
-		println(getNodeCount(trieRoot))
+
+		trieRoot := scheduler.trie.root
+		DisplayMemoryUsage(trieRoot)
+
 		serializeNodesByLevelsRecursively(trieRoot, 3, 2, scheduler.trie.serializer)
-		runtime.GC()
-		println("Done")
-		PrintMemUsage()
-		println(getNodeCount(trieRoot))
+		gc()
+
+		DisplayMemoryUsage(trieRoot)
 		scheduler.trie.lock.Unlock()
 	}
 }
 
-func PrintMemUsage() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
-	fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
-	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
-	fmt.Printf("\tNumGC = %v\n", m.NumGC)
+func gc() {
+	runtime.GC()
 }
-func bToMb(b uint64) uint64 {
-	return b / 1024 / 1024
+
+func DisplayMemoryUsage(trieRoot *TNode) {
+	log.Printf("\nTrie node count: %v", getNodeCount(trieRoot))
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	memAlloc := mem.Alloc / 1024 / 1024
+	log.Printf("\nMemory allocated: %v MiB", memAlloc)
 }
+
 func getNodeCount(node *TNode) int {
 	count := 1
 	if node == nil || node.Successors == nil {
@@ -88,7 +91,7 @@ func getFarFromRootNodes(node *TNode, distance int) []*TNode {
 }
 
 func NewScheduler(trie *Trie) *Scheduler {
-	newScheduler := &Scheduler{schedulerDelay: time.Minute * 10, trie: trie}
+	newScheduler := &Scheduler{schedulerDelay: time.Minute * serializationCallDelayMinutes, trie: trie}
 	go newScheduler.persistsIfQueueIsFull()
 	return newScheduler
 }
