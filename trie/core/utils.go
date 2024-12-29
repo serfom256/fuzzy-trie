@@ -16,7 +16,7 @@ func shouldCollectSuffix(toSearch string, pos int) bool {
 	return pos < len(toSearch) && toSearch[pos] == suffixRegex
 }
 
-func checkHashExistence(data *SearchData, pos int, distance int, node *TNode) bool {
+func checkHashExistence(data *LookupResult, pos int, distance int, node *TNode) bool {
 	hash := ((pos + 1) << data.Typos) | distance
 	if data.canMoveNext(node, distance, hash) {
 		return true

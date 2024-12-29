@@ -1,4 +1,4 @@
-package trie
+package common
 
 import (
 	"bufio"
@@ -13,7 +13,7 @@ func ReadDir(path string, t *core.Trie) {
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Println(path, "permission denied")
+				// log.Println(path, "permission denied")
 			} else {
 				t.Add(info.Name(), path)
 			}

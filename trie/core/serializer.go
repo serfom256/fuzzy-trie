@@ -11,7 +11,7 @@ type Serializer struct {
 	position int
 }
 
-const cachePath = "cache/"
+const cachePath = ".cache/"
 const fileMode = 0777
 
 func (s *Serializer) DeserializeNode(node *TNode) []*TNode {
@@ -70,10 +70,14 @@ func (s *Serializer) serializeNode(node *TNode) {
 	node.Successors = nil
 }
 
+func clear(s *Serializer) {
+	os.RemoveAll(cachePath)
+}
+
 func (s *Serializer) Init() {
 	err := os.Mkdir(cachePath, fileMode)
 	if err != nil {
-		log.Println("Cannot create [cache] directory, probably this directory already exists")
+		log.Println("Cannot create [./cache] directory, probably it's already exists")
 	}
 }
 

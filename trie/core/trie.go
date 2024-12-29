@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/serfom256/fuzzy-trie/trie/core/model"
 )
 
 type Trie struct {
@@ -20,13 +22,7 @@ type RootNode struct {
 	node *TNode
 }
 
-type OnFindFunction func(data SearchData, node TNode) error
-
-const (
-	branchSerializationThreshold int     = 15
-	rootPadding                  int     = 10
-	rootPaddingFactor            float32 = 0.5
-)
+type OnFindFunction func(data LookupResult, node TNode) error
 
 // Add Appends a pair of key and value to map
 func (t *Trie) Add(key string, value string) {
@@ -99,17 +95,17 @@ func (t *Trie) findNode(key string) *TNode {
 }
 
 // Search returns result founded by the specified key
-func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunction) []Result {
+func (t *Trie) Search(toSearch string, distance int, cnt int, onFind OnFindFunction) []model.Result {
 	t.lock.Lock()
 
-	result := SearchData{Count: cnt, Typos: distance, toSearch: strings.ToLower(toSearch), founded: []Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}, onFind: onFind}
+	result := LookupResult{Count: cnt, Typos: distance, toSearch: strings.ToLower(toSearch), founded: []model.Result{}, resultCache: map[*TNode]bool{}, nodeCache: map[*TNode]int{}, onFind: onFind}
 	t.lookup(t.root, 0, distance, &result)
 
 	t.lock.Unlock()
 	return result.founded
 }
 
-func (t *Trie) lookup(current *TNode, pos int, dist int, data *SearchData) {
+func (t *Trie) lookup(current *TNode, pos int, dist int, data *LookupResult) {
 	if checkHashExistence(data, pos, dist, current) {
 		return
 	}
@@ -147,7 +143,7 @@ func (t *Trie) lookup(current *TNode, pos int, dist int, data *SearchData) {
 	}
 }
 
-func (t *Trie) collectPairs(node *TNode, data *SearchData) {
+func (t *Trie) collectPairs(node *TNode, data *LookupResult) {
 	if _, ok := data.resultCache[node]; ok {
 		return
 	}
@@ -162,10 +158,10 @@ func (t *Trie) collectPairs(node *TNode, data *SearchData) {
 			values = append(values, string(pair))
 		}
 	}
-	data.founded = append(data.founded, Result{Key: key, Value: values})
+	data.founded = append(data.founded, model.Result{Key: key, Value: values})
 }
 
-func (t *Trie) collectSuffixes(node *TNode, data *SearchData) {
+func (t *Trie) collectSuffixes(node *TNode, data *LookupResult) {
 	if node == nil || data.isFounded() || data.resultCache[node] {
 		return
 	}

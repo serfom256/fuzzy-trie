@@ -1,7 +1,6 @@
 package core
 
 import (
-	"log"
 	"runtime"
 	"time"
 )
@@ -12,43 +11,34 @@ type Scheduler struct {
 }
 
 const (
-	serializationNodeAmount       = 1000
-	serializationCallDelayMinutes = 10
+	serializationCallDelayMinutes = 20
 )
 
 func (scheduler *Scheduler) persistsIfQueueIsFull() {
-	log.Println("\nStart scheduling...")
+
 	for {
 		time.Sleep(scheduler.schedulerDelay)
 
 		scheduler.trie.lock.Lock()
 
 		trieRoot := scheduler.trie.root
-		DisplayMemoryUsage(trieRoot)
 
-		serializeNodesByLevelsRecursively(trieRoot, 3, 2, scheduler.trie.serializer)
-		gc()
+		iterations := 3
+		distanceFromRoot := 3
 
-		DisplayMemoryUsage(trieRoot)
+		serializeNodesByLevelsRecursively(trieRoot, distanceFromRoot, iterations, scheduler.trie.serializer)
+		runtime.GC()
+
 		scheduler.trie.lock.Unlock()
 	}
 }
 
-func gc() {
-	runtime.GC()
-}
-
-func DisplayMemoryUsage(trieRoot *TNode) {
-	log.Printf("\nTrie node count: %v", getNodeCount(trieRoot))
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
-	memAlloc := mem.Alloc / 1024 / 1024
-	log.Printf("\nMemory allocated: %v MiB", memAlloc)
-}
-
 func getNodeCount(node *TNode) int {
+	if node == nil {
+		return 0
+	}
 	count := 1
-	if node == nil || node.Successors == nil {
+	if node.Successors == nil {
 		return count
 	}
 	for _, n := range node.Successors {
@@ -57,17 +47,18 @@ func getNodeCount(node *TNode) int {
 	return count
 }
 
-func serializeNodesByLevelsRecursively(node *TNode, distance int, rootDistance int, serializer *Serializer) {
-	if rootDistance == 0 {
+func serializeNodesByLevelsRecursively(node *TNode, distance int, iterations int, serializer *Serializer) {
+	if iterations == 0 {
 		return
 	}
+	serializationThreshold := 1000 * iterations
+
 	nextNodes := getFarFromRootNodes(node, distance)
+
 	for _, subNode := range nextNodes {
-		if getNodeCount(subNode) > serializationNodeAmount {
-			serializeNodesByLevelsRecursively(subNode, distance, rootDistance-1, serializer)
-			if getNodeCount(subNode) > serializationNodeAmount {
-				serializer.MarkNodeToBeSerialized(subNode)
-			}
+		if getNodeCount(subNode) > serializationThreshold {
+			serializeNodesByLevelsRecursively(subNode, distance, iterations-1, serializer)
+			serializer.MarkNodeToBeSerialized(subNode)
 		}
 	}
 }
